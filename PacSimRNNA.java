@@ -1,4 +1,3 @@
-
 import java.awt.Point;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +57,101 @@ class PopulationPath
 		//copy path list
 		this.path = copyList( oldPopPath.path );
 	}	
+	
+	// returns cost of shortest path from point to any other point 
+	public int showShortestPath( int [][] costTable, int pointIndex, List<Point> path, List<Point> listFood )
+	{
+		int smallest;
+		int [] oneDimCost = new int[costTable.length];
+		
+		// create cost table with respect to the desired initial point
+		for( int i = 0; i < oneDimCost.length; i++ )
+		{
+			oneDimCost[i] = costTable[pointIndex][i];
+		}
+
+		// prevent eaten pellets from being considered in shortest path
+		for( int i = 0; i < listFood.size(); i++ )
+		{
+			if ( path.contains( listFood.get(i) ) )
+			{
+				oneDimCost[i + 1] = Integer.MAX_VALUE;
+			}
+		}
+		
+		// set initial value
+		smallest = Integer.MAX_VALUE;
+		
+		for( int i = 1; i < costTable.length; i++ )
+		{
+			// update smallest if applicable
+			if( oneDimCost[i] < smallest && oneDimCost[i] != 0 )
+			{
+				smallest = oneDimCost[i];
+			}
+		}
+		
+		return smallest;
+	}
+	
+	public void populatePath( int [][] costTable, List<PopulationPath> populationList, List<Point> listFood )
+	{
+		PopulationPath divergingPop;
+	
+		// adds amount of points left to path
+		for( int k = this.path.size(); k < listFood.size(); k++ )
+		{
+			// adds one point to path
+			for( int i = 0; i < listFood.size(); i++ )
+			{
+				boolean branch = false;
+					
+				// compute shortest path value in cost table
+				int costTableIndex = listFood.indexOf( this.showTail() ) + 1;
+				int shortestPath = showShortestPath( costTable, costTableIndex, this.path, listFood ); 
+				
+				// add shortest path point to this.path and create new pop object if multiple
+				for( int j = 0; j < costTable.length - 1; j++ )
+				{
+					if( branch == true )
+					{
+						if( costTable[costTableIndex][j + 1] == shortestPath && !this.path.contains(listFood.get(j)) )
+						{
+							// create a diverging population
+							divergingPop = new PopulationPath( this );
+								
+							// take off last entry in list 
+							divergingPop.path.remove( divergingPop.path.size() - 1 );
+							
+							// add point to path list
+							divergingPop.path.add( listFood.get(j) );
+							
+							// populate the rest of the path
+							divergingPop.populatePath( costTable, populationList, listFood );
+							
+							// add diverging population to population list
+							populationList.add( divergingPop );
+						}	
+					}
+					// point is equal to shortest distance and is not already in the path
+					else if( costTable[costTableIndex][j + 1] == shortestPath && !this.path.contains(listFood.get(j)) )
+					{	
+						// add cost of path to moveCost array
+						this.moveCost[k] = shortestPath;
+							
+						// update total cost of path
+						this.costPath += shortestPath;
+						
+						// add point to path list
+						this.path.add( listFood.get(j) );
+							
+						// indicate that any additional points would branch
+						branch = true;
+					}
+				}
+			}
+		}
+	}
 	
 	public List<Point> copyList( List<Point> oldList)
 	{
@@ -204,42 +298,6 @@ public class PacSimRNNA implements PacAction
 		return costTable;
 	}
 	
-	// returns cost of shortest path from point to any other point 
-	public int showShortestPath( int [][] costTable, int pointIndex, List<Point> path, List<Point> listFood )
-	{
-		int smallest;
-		int [] oneDimCost = new int[costTable.length];
-		
-		// create cost table with respect to the desired initial point
-		for( int i = 0; i < oneDimCost.length; i++ )
-		{
-			oneDimCost[i] = costTable[pointIndex][i];
-		}
-
-		// prevent eaten pellets from being considered in shortest path
-		for( int i = 0; i < listFood.size(); i++ )
-		{
-			if ( path.contains( listFood.get(i) ) )
-			{
-				oneDimCost[i + 1] = Integer.MAX_VALUE;
-			}
-		}
-		
-		// set initial value
-		smallest = Integer.MAX_VALUE;
-		
-		for( int i = 1; i < costTable.length; i++ )
-		{
-			// update smallest if applicable
-			if( oneDimCost[i] < smallest && oneDimCost[i] != 0 )
-			{
-				smallest = oneDimCost[i];
-			}
-		}
-		
-		return smallest;
-	}
-	
 	// adds the in-between points to food order solution
 	public List<Point> findSolutionPath( PacmanCell pc, List<Point> path, PacCell [][] grid ) 
 	{
@@ -292,6 +350,9 @@ public class PacSimRNNA implements PacAction
 			// create list to hold populations
 			List<PopulationPath> populationList = new ArrayList<>();
 			
+			// create list to hold diverging populations
+			List<PopulationPath> divergingList = new ArrayList<>();
+			
 			// create population objects for listFood and add them to population list
 			for ( int i = 0; i < totalFood; i++ )
 			{
@@ -320,60 +381,13 @@ public class PacSimRNNA implements PacAction
 				")," + populationList.get(i).moveCost[0] + "]");
 			}
 			System.out.println();
-			
-			// variables needed for generating populations after adding first point to path
-			int costTableIndex;
-			int shortestPath;
-			boolean branch;
-			
-			// adds additional points after first point to paths 
-			for( int k = 1; k < totalFood; k++ )
+					
+			//populatePath( int [][] costTable, List<PopulationPath> populationList, List<Point> listFood )
+			for( int i = 0; i < totalFood; i++ )
 			{
-				// adds one point to each path
-				for( int i = 0; i < totalFood; i++ )
-				{
-					branch = false;
+				populationList.get(i).populatePath( costTable, populationList, listFood );
+			}		
 					
-					// compute shortest path value in cost table
-					costTableIndex = listFood.indexOf( populationList.get(i).showTail() ) + 1;
-					shortestPath = showShortestPath( costTable, costTableIndex, populationList.get(i).path, listFood ); 
-					
-					// add shortest path point to populationList.get(i) and create new pop object if multiple
-					for( int j = 0; j < costTable.length - 1; j++ )
-					{
-						if( branch == true )
-						{/*
-							if( costTable[costTableIndex][j + 1] == shortestPath)
-							{
-								// add new population to list, that is copy of current list
-								populationList.add( new PopulationPath( populationList.get(i) ) );
-								
-								// take off last entry in list 
-								populationList.get( populationList.size() -1 ).path.remove( populationList.get( populationList.size() - 1).path.size() - 1);
-								
-								// add point to path list
-								populationList.get( populationList.size() ).path.add( listFood.get(j) );
-							}	
-						*/}
-						// point is equal to shortest distance and is not already in the path
-						else if( costTable[costTableIndex][j + 1] == shortestPath && !populationList.get(i).path.contains(listFood.get(j)) )
-						{	
-							// add cost of path to moveCost array
-							populationList.get(i).moveCost[k] = shortestPath;
-							
-							// update total cost of path
-							populationList.get(i).costPath += shortestPath;
-						
-							// add point to path list
-							populationList.get(i).path.add( listFood.get(j) );
-							
-							// indicate that any additional points would branch
-							branch = true;
-						}
-					}
-				}
-			}
-			
 			// sort population list
 			Collections.sort( populationList, new SortPath());
 			
